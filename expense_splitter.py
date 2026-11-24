@@ -1,12 +1,20 @@
+from decimal import Decimal, ROUND_HALF_UP
+
+
 def split_equally(amount, people):
     """Split an amount equally among a list of people.
+
+    Shares are rounded to 2 decimal places. Any leftover cents are given, one
+    cent at a time, to the first people in the list so the shares add up to
+    the amount exactly.
 
     Args:
         amount (float): Total amount to split.
         people (list[str]): Names of the people sharing the amount.
 
     Returns:
-        dict[str, float]: Mapping of each person's name to their equal share.
+        dict[str, Decimal]: Mapping of each person's name to their share,
+            each quantized to 2 decimal places.
 
     Raises:
         ValueError: If amount is not positive, or if people is empty.
@@ -15,8 +23,14 @@ def split_equally(amount, people):
         raise ValueError("Amount must be positive")
     if not people:
         raise ValueError("At least one person required")
-    share = amount / len(people)
-    return {name: share for name in people}
+    total = Decimal(str(amount)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    total_cents = int(total * 100)
+    base_cents, extra_cents = divmod(total_cents, len(people))
+    shares = {}
+    for index, name in enumerate(people):
+        cents = base_cents + (1 if index < extra_cents else 0)
+        shares[name] = (Decimal(cents) / Decimal(100)).quantize(Decimal("0.01"))
+    return shares
 
 
 def add_expense(expenses, payer, amount, description):
@@ -66,13 +80,13 @@ def calculate_balances(expenses, people):
     """
     if not people:
         raise ValueError("At least one person required")
-    balances = {name: 0.0 for name in people}
+    balances = {name: Decimal("0.00") for name in people}
     for expense in expenses:
         payer = expense["payer"]
         if payer not in balances:
             raise ValueError("Payer must be included in people")
         shares = split_equally(expense["amount"], people)
-        balances[payer] += expense["amount"]
+        balances[payer] += sum(shares.values())
         for name, share in shares.items():
             balances[name] -= share
     return balances
